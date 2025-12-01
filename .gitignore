@@ -1,0 +1,9 @@
+# Ignore local environment variable files
+.env
+.env.local
+.env.*.local
+
+# If .env is already tracked, run:
+# git rm --cached .env
+# git commit -m "Stop tracking .env"
+# git push
