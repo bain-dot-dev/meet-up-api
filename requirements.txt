@@ -1,0 +1,6 @@
+# Meetup GraphQL API to Supabase Integration
+# Python 3.10+
+
+requests>=2.31.0
+python-dotenv>=1.0.0
+supabase>=2.0.0
