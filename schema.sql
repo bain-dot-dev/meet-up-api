@@ -1,8 +1,11 @@
 -- Supabase Schema for Meetup Events
 -- Run this script in your Supabase SQL Editor
 
+-- Create the staging schema
+CREATE SCHEMA IF NOT EXISTS staging_meetup;
+
 -- Main table for storing Meetup events
-CREATE TABLE IF NOT EXISTS meetup_events (
+CREATE TABLE IF NOT EXISTS staging_meetup.meetup_events (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
     description TEXT,
@@ -30,31 +33,31 @@ CREATE TABLE IF NOT EXISTS meetup_events (
 
 -- Index for topic-based queries
 CREATE INDEX IF NOT EXISTS idx_meetup_events_topic_keyword
-ON meetup_events(topic_keyword);
+ON staging_meetup.meetup_events(topic_keyword);
 
 -- Index for date-based queries
 CREATE INDEX IF NOT EXISTS idx_meetup_events_date_time
-ON meetup_events(date_time DESC);
+ON staging_meetup.meetup_events(date_time DESC);
 
 -- Index for location-based queries
 CREATE INDEX IF NOT EXISTS idx_meetup_events_search_location
-ON meetup_events(search_lat, search_lon);
+ON staging_meetup.meetup_events(search_lat, search_lon);
 
 -- Index for venue location queries
 CREATE INDEX IF NOT EXISTS idx_meetup_events_venue_location
-ON meetup_events(venue_lat, venue_lon);
+ON staging_meetup.meetup_events(venue_lat, venue_lon);
 
 -- Index for group queries
 CREATE INDEX IF NOT EXISTS idx_meetup_events_group_id
-ON meetup_events(group_id);
+ON staging_meetup.meetup_events(group_id);
 
 -- GIN index for full-text search on raw_event JSONB
 CREATE INDEX IF NOT EXISTS idx_meetup_events_raw_event
-ON meetup_events USING GIN(raw_event);
+ON staging_meetup.meetup_events USING GIN(raw_event);
 
 -- Composite index for common query patterns
 CREATE INDEX IF NOT EXISTS idx_meetup_events_topic_date
-ON meetup_events(topic_keyword, date_time DESC);
+ON staging_meetup.meetup_events(topic_keyword, date_time DESC);
 
 -- Trigger to auto-update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -66,6 +69,6 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER update_meetup_events_updated_at
-BEFORE UPDATE ON meetup_events
+BEFORE UPDATE ON staging_meetup.meetup_events
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();

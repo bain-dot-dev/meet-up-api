@@ -467,7 +467,7 @@ def upsert_events_to_supabase(events: List[Dict[str, Any]]) -> None:
 
         try:
             # Upsert the batch
-            response = supabase.table("meetup_events").upsert(batch).execute()
+            response = supabase.schema("staging_meetup").table("meetup_events").upsert(batch).execute()
 
             batch_succeeded = len(batch)
             succeeded += batch_succeeded
