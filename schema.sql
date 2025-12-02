@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS staging_meetup.meetup_events (
     group_id TEXT,
     group_name TEXT,
     group_urlname TEXT,
+    group_photo_id TEXT,
+    group_photo_base_url TEXT,
     venue_name TEXT,
     venue_city TEXT,
     venue_state TEXT,

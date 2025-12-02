@@ -129,6 +129,10 @@ query($filter: EventSearchFilter!, $first: Int, $after: String) {
           id
           name
           urlname
+          keyGroupPhoto {
+            id
+            baseUrl
+          }
         }
         venues {
           name
@@ -250,6 +254,11 @@ def normalize_event(
     photo_id = featured_photo.get("id")
     photo_base_url = featured_photo.get("baseUrl")
 
+    # Extract group photo
+    group_photo = group.get("keyGroupPhoto") or {}
+    group_photo_id = group_photo.get("id")
+    group_photo_base_url = group_photo.get("baseUrl")
+
     # Parse dateTime
     date_time = raw_node.get("dateTime")
     if date_time:
@@ -270,6 +279,8 @@ def normalize_event(
         "group_id": group.get("id"),
         "group_name": group.get("name"),
         "group_urlname": group.get("urlname"),
+        "group_photo_id": group_photo_id,
+        "group_photo_base_url": group_photo_base_url,
         "venue_name": venue.get("name"),
         "venue_city": venue.get("city"),
         "venue_state": venue.get("state"),

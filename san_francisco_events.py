@@ -57,6 +57,10 @@ query($filter: EventSearchFilter!, $first: Int, $after: String) {
           id
           name
           urlname
+          keyGroupPhoto {
+            id
+            baseUrl
+          }
         }
         venues {
           name
