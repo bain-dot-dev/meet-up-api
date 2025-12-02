@@ -254,10 +254,8 @@ def normalize_event(
         "id": raw_node.get("id", ""),
         "title": raw_node.get("title", ""),
         "description": raw_node.get("description"),
-        "short_description": None,  # Field no longer exists in new API
         "event_url": raw_node.get("eventUrl"),
         "date_time": date_time,
-        "going": None,  # Field no longer exists in new API
         "group_id": group.get("id"),
         "group_name": group.get("name"),
         "group_urlname": group.get("urlname"),
