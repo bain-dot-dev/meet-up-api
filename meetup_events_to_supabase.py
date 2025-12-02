@@ -29,6 +29,9 @@ import requests
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
+# Meetup API uses MILES (not kilometers) with a silent cap at 100 miles
+MAX_RADIUS_MILES = 100
+
 # Load environment variables
 load_dotenv()
 
@@ -57,7 +60,7 @@ class LocationConfig(TypedDict):
     name: str  # Human-readable name for logging
     lat: float
     lon: float
-    radius_km: float
+    radius_miles: float  # Search radius in miles (max 100)
     topics: List[str]  # List of topics to search for in this location
 
 
@@ -68,21 +71,21 @@ LOCATIONS: List[LocationConfig] = [
         "name": "San Francisco Bay Area",
         "lat": 37.7749,
         "lon": -122.4194,
-        "radius_km": 50,
+        "radius_miles": 31,  # ~50km
         "topics": ["tech", "ai", "python", "javascript", "startups"],
     },
     {
         "name": "New York City",
         "lat": 40.7128,
         "lon": -74.0060,
-        "radius_km": 50,
+        "radius_miles": 31,  # ~50km
         "topics": ["tech", "ai", "machine learning", "fintech"],
     },
     {
         "name": "Austin",
         "lat": 30.2672,
         "lon": -97.7431,
-        "radius_km": 40,
+        "radius_miles": 25,  # ~40km
         "topics": ["tech", "blockchain", "web3"],
     },
     # Add more locations here
@@ -90,7 +93,7 @@ LOCATIONS: List[LocationConfig] = [
     #     "name": "Seattle",
     #     "lat": 47.6062,
     #     "lon": -122.3321,
-    #     "radius_km": 50,
+    #     "radius_miles": 31,  # ~50km
     #     "topics": ["cloud", "devops", "aws"],
     # },
 ]
@@ -303,7 +306,7 @@ def normalize_event(
 def search_events_by_location(
     lat: float,
     lon: float,
-    radius_km: float,
+    radius_miles: float,
     topic_keyword: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
@@ -312,16 +315,21 @@ def search_events_by_location(
     Args:
         lat: Latitude
         lon: Longitude
-        radius_km: Search radius in kilometers
+        radius_miles: Search radius in miles (max 100)
         topic_keyword: Optional topic keyword filter
 
     Returns:
         List of normalized event dicts
     """
+    # Cap at maximum allowed radius (Meetup API silently caps at 100 miles)
+    if radius_miles > MAX_RADIUS_MILES:
+        print(f"WARNING: Radius {radius_miles} miles exceeds maximum of {MAX_RADIUS_MILES} miles. Capping at {MAX_RADIUS_MILES} miles.", file=sys.stderr)
+        radius_miles = MAX_RADIUS_MILES
+
     search_context = {
         "search_lat": lat,
         "search_lon": lon,
-        "search_radius_km": radius_km,
+        "search_radius_miles": radius_miles,
     }
 
     # Use provided keyword or a broad default
@@ -332,7 +340,7 @@ def search_events_by_location(
             "query": query_keyword,
             "lat": lat,
             "lon": lon,
-            "radius": radius_km,
+            "radius": radius_miles,
         },
         "first": 100,
         "after": None,
@@ -341,7 +349,7 @@ def search_events_by_location(
     events = []
     page_count = 0
 
-    print(f"Searching events by location (lat={lat}, lon={lon}, radius={radius_km}km, topic='{query_keyword}')...")
+    print(f"Searching events by location (lat={lat}, lon={lon}, radius={radius_miles} miles, topic='{query_keyword}')...")
 
     while page_count < MAX_PAGES:
         try:
@@ -378,14 +386,14 @@ def search_events_by_location(
 # Default location for global searches (San Francisco as default)
 DEFAULT_LAT = 37.7749
 DEFAULT_LON = -122.4194
-DEFAULT_RADIUS_KM = 100
+DEFAULT_RADIUS_MILES = 62  # ~100km, but capped at API max of 100 miles
 
 
 def search_events_by_topic(
     topic_keyword: str,
     lat: Optional[float] = None,
     lon: Optional[float] = None,
-    radius_km: Optional[float] = None,
+    radius_miles: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     """
     Search for events by topic keyword, optionally filtered by location.
@@ -394,7 +402,7 @@ def search_events_by_topic(
         topic_keyword: Topic keyword to search for
         lat: Optional latitude for geographic filtering (defaults to SF if not provided)
         lon: Optional longitude for geographic filtering (defaults to SF if not provided)
-        radius_km: Optional search radius in kilometers
+        radius_miles: Optional search radius in miles (max 100)
 
     Returns:
         List of normalized event dicts
@@ -402,12 +410,17 @@ def search_events_by_topic(
     # lat and lon are now required in the new API, use defaults if not provided
     actual_lat = lat if lat is not None else DEFAULT_LAT
     actual_lon = lon if lon is not None else DEFAULT_LON
-    actual_radius = radius_km if radius_km is not None else DEFAULT_RADIUS_KM
+    actual_radius_miles = radius_miles if radius_miles is not None else DEFAULT_RADIUS_MILES
+
+    # Cap at maximum allowed radius (Meetup API silently caps at 100 miles)
+    if actual_radius_miles > MAX_RADIUS_MILES:
+        print(f"WARNING: Radius {actual_radius_miles} miles exceeds maximum of {MAX_RADIUS_MILES} miles. Capping at {MAX_RADIUS_MILES} miles.", file=sys.stderr)
+        actual_radius_miles = MAX_RADIUS_MILES
 
     search_context = {
         "search_lat": actual_lat,
         "search_lon": actual_lon,
-        "search_radius_km": actual_radius,
+        "search_radius_miles": actual_radius_miles,
     }
 
     variables = {
@@ -415,7 +428,7 @@ def search_events_by_topic(
             "query": topic_keyword,
             "lat": actual_lat,
             "lon": actual_lon,
-            "radius": actual_radius,
+            "radius": actual_radius_miles,
         },
         "first": 100,
         "after": None,
@@ -424,7 +437,7 @@ def search_events_by_topic(
     events = []
     page_count = 0
 
-    location_str = f", lat={actual_lat}, lon={actual_lon}, radius={actual_radius}km"
+    location_str = f", lat={actual_lat}, lon={actual_lon}, radius={actual_radius_miles} miles"
     print(f"Searching events by topic (topic='{topic_keyword}'{location_str})...")
 
     while page_count < MAX_PAGES:
@@ -522,7 +535,7 @@ def main() -> None:
         location_name = location["name"]
         lat = location["lat"]
         lon = location["lon"]
-        radius_km = location["radius_km"]
+        radius_miles = location["radius_miles"]
         topics = location["topics"]
 
         print(f"\n{'='*80}")
@@ -537,7 +550,7 @@ def main() -> None:
                 events = search_events_by_location(
                     lat=lat,
                     lon=lon,
-                    radius_km=radius_km,
+                    radius_miles=radius_miles,
                     topic_keyword=topic,
                 )
                 all_events.extend(events)

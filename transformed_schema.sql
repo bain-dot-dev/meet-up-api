@@ -1,5 +1,9 @@
 -- Supabase Schema for Meetup Events
 -- Run this script in your Supabase SQL Editor
+--
+-- IMPORTANT NOTE: The Meetup API uses MILES (not kilometers)!
+-- All radius values are stored in miles.
+-- Maximum allowed radius: 100 miles (API enforces this limit silently)
 
 -- Create the staging schema
 CREATE SCHEMA IF NOT EXISTS staging_meetup;
@@ -27,7 +31,7 @@ CREATE TABLE IF NOT EXISTS staging_meetup.meetup_events (
     topic_keyword TEXT,
     search_lat DOUBLE PRECISION,
     search_lon DOUBLE PRECISION,
-    search_radius_km DOUBLE PRECISION,
+    search_radius_miles DOUBLE PRECISION,  -- Search radius in miles (max 100)
     raw_event JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()

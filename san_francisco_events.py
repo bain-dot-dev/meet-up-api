@@ -20,6 +20,9 @@ from typing import Dict, Any
 import requests
 from dotenv import load_dotenv
 
+# Meetup API uses MILES (not kilometers) with a silent cap at 100 miles
+MAX_RADIUS_MILES = 100
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -30,7 +33,7 @@ MEETUP_API_ENDPOINT = os.getenv("MEETUP_API_ENDPOINT", "https://api.meetup.com/g
 # San Francisco coordinates
 SF_LAT = 37.7749
 SF_LON = -122.4194
-SF_RADIUS_KM = 50
+SF_RADIUS_MILES = 31  # Meetup API uses miles, maximum 100 miles
 
 # GraphQL query for searching events
 SEARCH_EVENTS_QUERY = """
@@ -145,12 +148,18 @@ def get_sf_events() -> Dict[str, Any]:
     Returns:
         GraphQL response containing events
     """
+    # Cap at maximum allowed radius (Meetup API silently caps at 100 miles)
+    radius_miles = min(SF_RADIUS_MILES, MAX_RADIUS_MILES)
+
+    if SF_RADIUS_MILES > MAX_RADIUS_MILES:
+        print(f"WARNING: Radius {SF_RADIUS_MILES} miles exceeds maximum of {MAX_RADIUS_MILES} miles. Capping at {MAX_RADIUS_MILES} miles.", file=sys.stderr)
+
     variables = {
         "filter": {
             "query": "tech",
             "lat": SF_LAT,
             "lon": SF_LON,
-            "radius": SF_RADIUS_KM,
+            "radius": radius_miles,
         },
         "first": 20,
     }
@@ -160,7 +169,8 @@ def get_sf_events() -> Dict[str, Any]:
 
 def main() -> None:
     """Main entry point."""
-    print(f"Fetching tech events near San Francisco (lat={SF_LAT}, lon={SF_LON}, radius={SF_RADIUS_KM}km)...\n")
+    radius_miles = min(SF_RADIUS_MILES, MAX_RADIUS_MILES)
+    print(f"Fetching tech events near San Francisco (lat={SF_LAT}, lon={SF_LON}, radius={radius_miles} miles)...\n")
 
     result = get_sf_events()
 

@@ -24,6 +24,9 @@ from typing import Dict, Any, List, TypedDict, Optional
 import requests
 from dotenv import load_dotenv
 
+# Meetup API uses MILES (not kilometers) with a silent cap at 100 miles
+MAX_RADIUS_MILES = 100
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -45,7 +48,7 @@ class TestQuery(TypedDict):
     topic: str  # Topic keyword to search for
     lat: Optional[float]  # Optional latitude
     lon: Optional[float]  # Optional longitude
-    radius_km: Optional[float]  # Optional search radius in km
+    radius_miles: Optional[float]  # Optional search radius in miles (max 100)
 
 
 # Define test queries
@@ -56,21 +59,21 @@ TEST_QUERIES: List[TestQuery] = [
         "topic": "Data Science and Coffee",
         "lat": None,
         "lon": None,
-        "radius_km": None
+        "radius_miles": None
     },
     {
         "name": "New York AI Events",
         "topic": "ai",
         "lat": 40.7128,
         "lon": -74.0060,
-        "radius_km": 50,
+        "radius_miles": 31,  # ~50km
     },
     {
         "name": "Austin Python Events",
         "topic": "python",
         "lat": 30.2672,
         "lon": -97.7431,
-        "radius_km": 40,
+        "radius_miles": 25,  # ~40km
     },
     # Global search (no location filter)
     # {
@@ -78,7 +81,7 @@ TEST_QUERIES: List[TestQuery] = [
     #     "topic": "blockchain",
     #     "lat": None,
     #     "lon": None,
-    #     "radius_km": None,
+    #     "radius_miles": None,
     # },
 ]
 
@@ -192,7 +195,7 @@ def run_graphql_query(query: str, variables: Dict[str, Any]) -> Dict[str, Any]:
 # Default location for global searches (San Francisco)
 DEFAULT_LAT = 37.7749
 DEFAULT_LON = -122.4194
-DEFAULT_RADIUS_KM = 100
+DEFAULT_RADIUS_MILES = 62  # ~100km, but capped at API max of 100 miles
 
 
 def fetch_events(test_query: TestQuery) -> Dict[str, Any]:
@@ -208,7 +211,12 @@ def fetch_events(test_query: TestQuery) -> Dict[str, Any]:
     # lat and lon are required in the new API
     lat = test_query.get("lat") if test_query.get("lat") is not None else DEFAULT_LAT
     lon = test_query.get("lon") if test_query.get("lon") is not None else DEFAULT_LON
-    radius = test_query.get("radius_km") if test_query.get("radius_km") is not None else DEFAULT_RADIUS_KM
+    radius_miles = test_query.get("radius_miles") if test_query.get("radius_miles") is not None else DEFAULT_RADIUS_MILES
+
+    # Cap at maximum allowed radius (Meetup API silently caps at 100 miles)
+    if radius_miles and radius_miles > MAX_RADIUS_MILES:
+        print(f"WARNING: Radius {radius_miles} miles exceeds maximum of {MAX_RADIUS_MILES} miles. Capping at {MAX_RADIUS_MILES} miles.", file=sys.stderr)
+        radius_miles = MAX_RADIUS_MILES
 
     filter_config = {
         "query": test_query["topic"],
@@ -217,8 +225,8 @@ def fetch_events(test_query: TestQuery) -> Dict[str, Any]:
     }
 
     # Add radius if provided
-    if radius:
-        filter_config["radius"] = radius
+    if radius_miles:
+        filter_config["radius"] = radius_miles
 
     variables = {
         "filter": filter_config,
@@ -277,14 +285,15 @@ def main() -> None:
         topic = test_query["topic"]
         lat = test_query.get("lat")
         lon = test_query.get("lon")
-        radius_km = test_query.get("radius_km")
+        radius_miles = test_query.get("radius_miles")
 
         print(f"\n{'='*80}")
         print(f"Test {i}/{len(TEST_QUERIES)}: {test_name}")
         print(f"{'='*80}")
 
-        if lat and lon and radius_km:
-            print(f"Topic: '{topic}' | Location: ({lat}, {lon}) | Radius: {radius_km}km")
+        if lat and lon and radius_miles:
+            actual_radius = min(radius_miles, MAX_RADIUS_MILES)
+            print(f"Topic: '{topic}' | Location: ({lat}, {lon}) | Radius: {actual_radius} miles")
         else:
             print(f"Topic: '{topic}' | Location: Global (no location filter)")
 
