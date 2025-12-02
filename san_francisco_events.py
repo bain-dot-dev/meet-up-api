@@ -49,6 +49,10 @@ query($filter: EventSearchFilter!, $first: Int, $after: String) {
         description
         dateTime
         eventType
+        featuredEventPhoto {
+          id
+          baseUrl
+        }
         group {
           id
           name

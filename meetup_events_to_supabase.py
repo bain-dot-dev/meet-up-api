@@ -121,6 +121,10 @@ query($filter: EventSearchFilter!, $first: Int, $after: String) {
         description
         dateTime
         eventType
+        featuredEventPhoto {
+          id
+          baseUrl
+        }
         group {
           id
           name
@@ -241,6 +245,11 @@ def normalize_event(
     venues = raw_node.get("venues") or []
     venue = venues[0] if venues else {}
 
+    # Extract featured event photo
+    featured_photo = raw_node.get("featuredEventPhoto") or {}
+    photo_id = featured_photo.get("id")
+    photo_base_url = featured_photo.get("baseUrl")
+
     # Parse dateTime
     date_time = raw_node.get("dateTime")
     if date_time:
@@ -256,6 +265,8 @@ def normalize_event(
         "description": raw_node.get("description"),
         "event_url": raw_node.get("eventUrl"),
         "date_time": date_time,
+        "photo_id": photo_id,
+        "photo_base_url": photo_base_url,
         "group_id": group.get("id"),
         "group_name": group.get("name"),
         "group_urlname": group.get("urlname"),
