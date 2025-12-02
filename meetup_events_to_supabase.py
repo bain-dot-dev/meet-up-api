@@ -34,7 +34,7 @@ load_dotenv()
 
 # Configuration
 MEETUP_API_TOKEN = os.getenv("MEETUP_API_TOKEN")
-MEETUP_API_ENDPOINT = os.getenv("MEETUP_API_ENDPOINT", "https://api.meetup.com/gql")
+MEETUP_API_ENDPOINT = os.getenv("MEETUP_API_ENDPOINT", "https://api.meetup.com/gql-ext")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
@@ -106,9 +106,8 @@ GLOBAL_TOPICS: List[str] = [
 
 # GraphQL query for searching events
 SEARCH_EVENTS_QUERY = """
-query($filter: SearchConnectionFilter!, $after: String) {
-  keywordSearch(filter: $filter, input: {first: 100, after: $after}) {
-    count
+query($filter: EventSearchFilter!, $first: Int, $after: String) {
+  eventSearch(filter: $filter, first: $first, after: $after) {
     pageInfo {
       hasNextPage
       endCursor
@@ -117,29 +116,23 @@ query($filter: SearchConnectionFilter!, $after: String) {
       cursor
       node {
         id
-        result {
-          ... on Event {
-            id
-            title
-            eventUrl
-            description
-            shortDescription
-            dateTime
-            going
-            group {
-              id
-              name
-              urlname
-            }
-            venue {
-              name
-              lat
-              lon
-              city
-              state
-              country
-            }
-          }
+        title
+        eventUrl
+        description
+        dateTime
+        eventType
+        group {
+          id
+          name
+          urlname
+        }
+        venues {
+          name
+          lat
+          lon
+          city
+          state
+          country
         }
       }
     }
@@ -239,15 +232,17 @@ def normalize_event(
     Returns:
         Normalized event dict matching the meetup_events schema
     """
-    result = raw_node.get("result", {})
-    if not result:
+    # In the new API, the event data is directly in the node (not in result)
+    if not raw_node:
         return None
 
-    group = result.get("group") or {}
-    venue = result.get("venue") or {}
+    group = raw_node.get("group") or {}
+    # venues is now an array, get the first one
+    venues = raw_node.get("venues") or []
+    venue = venues[0] if venues else {}
 
     # Parse dateTime
-    date_time = result.get("dateTime")
+    date_time = raw_node.get("dateTime")
     if date_time:
         try:
             # Meetup returns ISO 8601 format, parse and convert to timestamp
@@ -256,13 +251,13 @@ def normalize_event(
             date_time = None
 
     normalized = {
-        "id": result.get("id", ""),
-        "title": result.get("title", ""),
-        "description": result.get("description"),
-        "short_description": result.get("shortDescription"),
-        "event_url": result.get("eventUrl"),
+        "id": raw_node.get("id", ""),
+        "title": raw_node.get("title", ""),
+        "description": raw_node.get("description"),
+        "short_description": None,  # Field no longer exists in new API
+        "event_url": raw_node.get("eventUrl"),
         "date_time": date_time,
-        "going": result.get("going"),
+        "going": None,  # Field no longer exists in new API
         "group_id": group.get("id"),
         "group_name": group.get("name"),
         "group_urlname": group.get("urlname"),
@@ -273,7 +268,7 @@ def normalize_event(
         "venue_lat": venue.get("lat"),
         "venue_lon": venue.get("lon"),
         "topic_keyword": topic_keyword,
-        "raw_event": result,
+        "raw_event": raw_node,
     }
 
     # Add search context if provided
@@ -318,8 +313,8 @@ def search_events_by_location(
             "lat": lat,
             "lon": lon,
             "radius": radius_km,
-            "source": "EVENTS",
         },
+        "first": 100,
         "after": None,
     }
 
@@ -331,7 +326,7 @@ def search_events_by_location(
     while page_count < MAX_PAGES:
         try:
             response = run_graphql_query(SEARCH_EVENTS_QUERY, variables)
-            data = response.get("data", {}).get("keywordSearch", {})
+            data = response.get("data", {}).get("eventSearch", {})
 
             edges = data.get("edges", [])
             for edge in edges:
@@ -360,6 +355,12 @@ def search_events_by_location(
     return events
 
 
+# Default location for global searches (San Francisco as default)
+DEFAULT_LAT = 37.7749
+DEFAULT_LON = -122.4194
+DEFAULT_RADIUS_KM = 100
+
+
 def search_events_by_topic(
     topic_keyword: str,
     lat: Optional[float] = None,
@@ -371,45 +372,45 @@ def search_events_by_topic(
 
     Args:
         topic_keyword: Topic keyword to search for
-        lat: Optional latitude for geographic filtering
-        lon: Optional longitude for geographic filtering
+        lat: Optional latitude for geographic filtering (defaults to SF if not provided)
+        lon: Optional longitude for geographic filtering (defaults to SF if not provided)
         radius_km: Optional search radius in kilometers
 
     Returns:
         List of normalized event dicts
     """
-    search_context = None
-    if lat is not None and lon is not None and radius_km is not None:
-        search_context = {
-            "search_lat": lat,
-            "search_lon": lon,
-            "search_radius_km": radius_km,
-        }
+    # lat and lon are now required in the new API, use defaults if not provided
+    actual_lat = lat if lat is not None else DEFAULT_LAT
+    actual_lon = lon if lon is not None else DEFAULT_LON
+    actual_radius = radius_km if radius_km is not None else DEFAULT_RADIUS_KM
+
+    search_context = {
+        "search_lat": actual_lat,
+        "search_lon": actual_lon,
+        "search_radius_km": actual_radius,
+    }
 
     variables = {
         "filter": {
             "query": topic_keyword,
-            "source": "EVENTS",
+            "lat": actual_lat,
+            "lon": actual_lon,
+            "radius": actual_radius,
         },
+        "first": 100,
         "after": None,
     }
-
-    # Add location filters if provided
-    if search_context:
-        variables["filter"]["lat"] = lat
-        variables["filter"]["lon"] = lon
-        variables["filter"]["radius"] = radius_km
 
     events = []
     page_count = 0
 
-    location_str = f", lat={lat}, lon={lon}, radius={radius_km}km" if search_context else ""
+    location_str = f", lat={actual_lat}, lon={actual_lon}, radius={actual_radius}km"
     print(f"Searching events by topic (topic='{topic_keyword}'{location_str})...")
 
     while page_count < MAX_PAGES:
         try:
             response = run_graphql_query(SEARCH_EVENTS_QUERY, variables)
-            data = response.get("data", {}).get("keywordSearch", {})
+            data = response.get("data", {}).get("eventSearch", {})
 
             edges = data.get("edges", [])
             for edge in edges:

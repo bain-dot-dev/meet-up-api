@@ -25,7 +25,7 @@ load_dotenv()
 
 # Configuration
 MEETUP_API_TOKEN = os.getenv("MEETUP_API_TOKEN")
-MEETUP_API_ENDPOINT = os.getenv("MEETUP_API_ENDPOINT", "https://api.meetup.com/gql")
+MEETUP_API_ENDPOINT = os.getenv("MEETUP_API_ENDPOINT", "https://api.meetup.com/gql-ext")
 
 # San Francisco coordinates
 SF_LAT = 37.7749
@@ -34,9 +34,8 @@ SF_RADIUS_KM = 50
 
 # GraphQL query for searching events
 SEARCH_EVENTS_QUERY = """
-query($filter: SearchConnectionFilter!) {
-  keywordSearch(filter: $filter) {
-    count
+query($filter: EventSearchFilter!, $first: Int, $after: String) {
+  eventSearch(filter: $filter, first: $first, after: $after) {
     pageInfo {
       hasNextPage
       endCursor
@@ -45,29 +44,23 @@ query($filter: SearchConnectionFilter!) {
       cursor
       node {
         id
-        result {
-          ... on Event {
-            id
-            title
-            eventUrl
-            description
-            shortDescription
-            dateTime
-            going
-            group {
-              id
-              name
-              urlname
-            }
-            venue {
-              name
-              lat
-              lon
-              city
-              state
-              country
-            }
-          }
+        title
+        eventUrl
+        description
+        dateTime
+        eventType
+        group {
+          id
+          name
+          urlname
+        }
+        venues {
+          name
+          lat
+          lon
+          city
+          state
+          country
         }
       }
     }
@@ -150,8 +143,8 @@ def get_sf_events() -> Dict[str, Any]:
             "lat": SF_LAT,
             "lon": SF_LON,
             "radius": SF_RADIUS_KM,
-            "source": "EVENTS",
-        }
+        },
+        "first": 20,
     }
 
     return run_graphql_query(SEARCH_EVENTS_QUERY, variables)
@@ -167,8 +160,8 @@ def main() -> None:
     print(json.dumps(result, indent=2))
 
     # Print summary
-    event_count = result.get("data", {}).get("keywordSearch", {}).get("count", 0)
-    print(f"\n✓ Found {event_count} events", file=sys.stderr)
+    edges = result.get("data", {}).get("eventSearch", {}).get("edges", [])
+    print(f"\n✓ Found {len(edges)} events", file=sys.stderr)
 
 
 if __name__ == "__main__":

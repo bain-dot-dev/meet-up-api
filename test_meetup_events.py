@@ -29,7 +29,7 @@ load_dotenv()
 
 # Configuration
 MEETUP_API_TOKEN = os.getenv("MEETUP_API_TOKEN")
-MEETUP_API_ENDPOINT = os.getenv("MEETUP_API_ENDPOINT", "https://api.meetup.com/gql")
+MEETUP_API_ENDPOINT = os.getenv("MEETUP_API_ENDPOINT", "https://api.meetup.com/gql-ext")
 
 
 # ============================================================================
@@ -52,11 +52,11 @@ class TestQuery(TypedDict):
 # Add or remove queries as needed
 TEST_QUERIES: List[TestQuery] = [
     {
-        "name": "San Francisco Tech Events",
-        "topic": "tech",
-        "lat": 37.7749,
-        "lon": -122.4194,
-        "radius_km": 50,
+        "name": "Data Science and Coffee",
+        "topic": "Data Science and Coffee",
+        "lat": None,
+        "lon": None,
+        "radius_km": None
     },
     {
         "name": "New York AI Events",
@@ -85,9 +85,8 @@ TEST_QUERIES: List[TestQuery] = [
 
 # GraphQL query for searching events
 SEARCH_EVENTS_QUERY = """
-query($filter: SearchConnectionFilter!) {
-  keywordSearch(filter: $filter) {
-    count
+query($filter: EventSearchFilter!, $first: Int, $after: String) {
+  eventSearch(filter: $filter, first: $first, after: $after) {
     pageInfo {
       hasNextPage
       endCursor
@@ -96,29 +95,23 @@ query($filter: SearchConnectionFilter!) {
       cursor
       node {
         id
-        result {
-          ... on Event {
-            id
-            title
-            eventUrl
-            description
-            shortDescription
-            dateTime
-            going
-            group {
-              id
-              name
-              urlname
-            }
-            venue {
-              name
-              lat
-              lon
-              city
-              state
-              country
-            }
-          }
+        title
+        eventUrl
+        description
+        dateTime
+        eventType
+        group {
+          id
+          name
+          urlname
+        }
+        venues {
+          name
+          lat
+          lon
+          city
+          state
+          country
         }
       }
     }
@@ -188,6 +181,12 @@ def run_graphql_query(query: str, variables: Dict[str, Any]) -> Dict[str, Any]:
         sys.exit(1)
 
 
+# Default location for global searches (San Francisco)
+DEFAULT_LAT = 37.7749
+DEFAULT_LON = -122.4194
+DEFAULT_RADIUS_KM = 100
+
+
 def fetch_events(test_query: TestQuery) -> Dict[str, Any]:
     """
     Fetch events based on a test query configuration.
@@ -198,18 +197,25 @@ def fetch_events(test_query: TestQuery) -> Dict[str, Any]:
     Returns:
         GraphQL response containing events
     """
+    # lat and lon are required in the new API
+    lat = test_query.get("lat") if test_query.get("lat") is not None else DEFAULT_LAT
+    lon = test_query.get("lon") if test_query.get("lon") is not None else DEFAULT_LON
+    radius = test_query.get("radius_km") if test_query.get("radius_km") is not None else DEFAULT_RADIUS_KM
+
     filter_config = {
         "query": test_query["topic"],
-        "source": "EVENTS",
+        "lat": lat,
+        "lon": lon,
     }
 
-    # Add location filters if provided
-    if test_query["lat"] is not None and test_query["lon"] is not None and test_query["radius_km"] is not None:
-        filter_config["lat"] = test_query["lat"]
-        filter_config["lon"] = test_query["lon"]
-        filter_config["radius"] = test_query["radius_km"]
+    # Add radius if provided
+    if radius:
+        filter_config["radius"] = radius
 
-    variables = {"filter": filter_config}
+    variables = {
+        "filter": filter_config,
+        "first": 20,
+    }
 
     return run_graphql_query(SEARCH_EVENTS_QUERY, variables)
 
@@ -221,21 +227,20 @@ def print_event_summary(events_data: Dict[str, Any]) -> None:
     Args:
         events_data: GraphQL response data
     """
-    keyword_search = events_data.get("data", {}).get("keywordSearch", {})
-    total_count = keyword_search.get("count", 0)
-    edges = keyword_search.get("edges", [])
+    event_search = events_data.get("data", {}).get("eventSearch", {})
+    edges = event_search.get("edges", [])
 
-    print(f"\nTotal events found: {total_count}")
-    print(f"Events returned in this response: {len(edges)}\n")
+    print(f"\nEvents returned in this response: {len(edges)}\n")
 
     if edges:
         print("Sample events:")
         print("-" * 80)
         for i, edge in enumerate(edges[:5], 1):  # Show first 5 events
-            event = edge.get("node", {}).get("result", {})
+            event = edge.get("node", {})
             title = event.get("title", "N/A")
             group_name = event.get("group", {}).get("name", "N/A")
-            venue = event.get("venue", {})
+            venues = event.get("venues", [])
+            venue = venues[0] if venues else {}
             venue_name = venue.get("name", "N/A")
             city = venue.get("city", "N/A")
 
